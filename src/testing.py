@@ -1,4 +1,6 @@
+import copy
 import decimal
+from math import isclose
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -6,52 +8,127 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Type
-from typing import Union
+from random import randint
 
+
+EPSILON = 1e-08
 
 # round(0.5) -> 1.0
 decimal.getcontext().rounding = decimal.ROUND_HALF_UP
 
 
-def solve(matrix: List[List[float]], precision: Optional[int]):
+def __is_close(first: float, second: float) -> bool:
+    return isclose(first, second, rel_tol=EPSILON, abs_tol=EPSILON)
+
+
+def get_solutions(matrix_input: List[List[float]], precision: Optional[int]) -> List[float]:
+    matrix: List[List[float]] = copy.deepcopy(matrix_input)
     print_matrix_and_precision_and_iteration(matrix, precision)
     for i in range(len(matrix) - 1):
         for j in range(i + 1, len(matrix)):
-            check_zero_division(matrix, i)
+            __check_zero_division(matrix, i)
             div: float = __round(matrix[j][i] / matrix[i][i], precision)
             matrix[j][-1] = __round(matrix[j][-1] - div * matrix[i][-1], precision)
             for k in range(i, len(matrix)):
                 matrix[j][k] = __round(matrix[j][k] - div * matrix[i][k], precision)
         print_matrix_and_precision_and_iteration(matrix, precision, iteration=i + 1)
     
-    solution: List[float] = [0 for _ in range(len(matrix))]
+    solutions: List[float] = [0 for _ in range(len(matrix))]
     for i in range(len(matrix) - 1, -1, -1):
-        check_zero_division(matrix, i)
-        numerator: float = sum(matrix[i][j] * solution[j] for j in range(i + 1, len(matrix)))
-        solution[i] = __round((matrix[i][-1] - numerator) / matrix[i][i], precision)
-    return solution
+        __check_zero_division(matrix, i)
+        numerator: float = sum(matrix[i][j] * solutions[j] for j in range(i + 1, len(matrix)))
+        solutions[i] = __round((matrix[i][-1] - numerator) / matrix[i][i], precision)
+    return solutions
 
 
-def check_zero_division(matrix: List[List[float]], i: int) -> None:
-    if matrix[i][i] == 0:
-        if all(matrix[i][j] == 0 for j in range(len(matrix[i]))):
-            raise Exception('Infinite number of answer')
+def get_residuals(matrix: List[List[float]], solution: List[float], precision: Optional[int]) -> List[float]:
+    matrix_right: List[float] = [row[-1] for row in matrix]
+    temp: List[float] = [0 for _ in range(len(matrix))]
+    
+    residuals: List[float] = [0 for _ in range(len(matrix))]
+    for i in range(len(matrix[0]) - 1):
+        temp[i] = 0
+        for j in range(len(matrix[0]) - 1):
+            temp[i] = __round(temp[i] + solution[j] * matrix[i][j], precision)
+        residuals[i] = __round(temp[i] - matrix_right[i], precision)
+    
+    return residuals
+
+
+def __check_zero_division(matrix: List[List[float]], i: int) -> None:
+    if __is_close(matrix[i][i], 0):
+        if all(__is_close(matrix[i][j], 0) for j in range(len(matrix[i]))):
+            raise Exception('Infinite many solutions')
         else:
             raise Exception('No solutions')
 
 
-def solve_from_file():
-    matrix, precision = get_matrix_and_precision_from_file()
-    solution = solve(matrix, precision)
-    print('solution')
-    print(solution)
+def solve(matrix_and_precision_getter: Callable[[], Tuple[List[List[float]], Optional[int]]]) -> None:
+    matrix, precision = matrix_and_precision_getter()
+    
+    matrix_short: List[List[float]] = [matrix[i][:len(matrix[i]) - 1] for i in range(len(matrix))]
+    
+    determinant: float = determinant_recursive(matrix_short)
+    determinant_formatted: str = __get_number_formatted(determinant, precision)
+    
+    if __is_close(determinant, 0):
+        print('determinant is zero, so either there are no solutions, or there are infinitely many solutions')
+    
+    solutions: List[float] = get_solutions(matrix, precision)
+    print(f'determinant: {determinant_formatted}\n')
+    __print_resulted_values(values=solutions, text_long='solutions', text_short='x', precision=precision)
+    
+    residuals: List[float] = get_residuals(matrix, solutions, precision)
+    __print_resulted_values(values=residuals, text_long='residuals', text_short='r', precision=precision)
 
 
-def solve_from_console():
-    matrix, precision = get_matrix_and_precision()
-    solution = solve(matrix, precision)
-    print('solution')
-    print(solution)
+def __print_resulted_values(values: List[float], text_long: str, text_short: str, precision: Optional[int] = None) -> None:
+    print(f'{text_long}: ')
+    for index, value in enumerate(values, 1):
+        value_formatted: str = __get_number_formatted(value, precision)
+        print(f'{text_short}[{index}] = {value_formatted}')
+    print()
+
+
+def solve_from_random() -> None:
+    solve(matrix_and_precision_getter=get_matrix_and_precision_from_random)
+
+
+def solve_from_file() -> None:
+    solve(matrix_and_precision_getter=get_matrix_and_precision_from_file)
+
+
+def solve_from_console() -> None:
+    solve(matrix_and_precision_getter=get_matrix_and_precision)
+
+
+def get_matrix_and_precision_from_random() -> Tuple[List[List[float]], Optional[int]]:
+    matrix_size_input: str = input('Enter matrix size (default = 5): ').strip()
+    matrix_size: int = int(matrix_size_input) if matrix_size_input else 5
+    
+    solutions_range = __get_range(name='solutions', bound_left=-10, bound_right=10)
+    coefficients_range = __get_range(name='coefficient', bound_left=-100, bound_right=100)
+    
+    solutions: List[float] = [randint(solutions_range[0], solutions_range[1]) for _ in range(matrix_size)]
+    
+    matrix: List[List[float]] = []
+    for _ in range(matrix_size):
+        coefficients: List[float] = [randint(coefficients_range[0], coefficients_range[1]) for _ in range(matrix_size)]
+        multipliers: List[float] = [solution * coefficient for solution, coefficient in zip(solutions, coefficients)]
+        after_equal_sign: float = sum(multipliers)
+        rows: List[float] = coefficients + [after_equal_sign]
+        matrix.append(rows)
+    
+    return matrix, None
+
+
+def __get_range(name: str, bound_left: int, bound_right: int) -> Tuple[int, int]:
+    range_input: str = input(f'Enter {name} range (default = {bound_left} {bound_right}): ')
+    range_default: Tuple[int, int] = bound_left, bound_right
+    if range_input:
+        range_splitted: List[str] = range_input.split()
+        range_default = int(range_splitted[0]), int(range_splitted[1])
+    return range_default
 
 
 def get_matrix_and_precision_from_file() -> Tuple[List[List[float]], Optional[int]]:
@@ -66,7 +143,14 @@ def get_matrix_and_precision(lines: Optional[List[str]] = None) -> Tuple[List[Li
     
     matrix: List[List[float]] = []
     
-    line_first, precision = __get_line_first_and_precision(lines)
+    line_first: str = __get_line_from_lines_or_input(lines, 0)
+    precision: Optional[int] = None
+    if __try_convert(line_first, int):
+        precision = int(line_first)
+        if precision < 0:
+            raise Exception('precision must be non-negative')
+        if lines is not None and len(lines) > 1:
+            line_first = __get_line_from_lines_or_input(lines, 1)
     
     line_first_converted: List[float] = __convert_line_and_add_to_matrix(line_first, matrix, precision)
     line_first_len: int = len(line_first_converted)
@@ -75,6 +159,13 @@ def get_matrix_and_precision(lines: Optional[List[str]] = None) -> Tuple[List[Li
     
     matrix_size: int = len(matrix[0]) - 1
     index_additional: int = 0 if precision is None else 1
+    
+    if lines is not None:
+        lines_len: int = len(lines) - index_additional
+        if lines_len < matrix_size:
+            raise Exception('number of equations is less than number of unknowns')
+        elif lines_len > matrix_size:
+            raise Exception('number of equations is greater than number of unknowns')
     
     for index in range(1 + index_additional, matrix_size + index_additional):
         line_current: str = __get_line_from_lines_or_input(lines, index)
@@ -87,16 +178,25 @@ def get_matrix_and_precision(lines: Optional[List[str]] = None) -> Tuple[List[Li
     return matrix, precision
 
 
-def __get_line_first_and_precision(lines: Optional[List[str]]) -> Tuple[str, Optional[int]]:
-    line_first: str = __get_line_from_lines_or_input(lines, 0)
-    precision: Optional[int] = None
-    if __try_convert(line_first, int):
-        precision = int(line_first)
-        if precision < 0:
-            raise Exception('precision must be non-negative')
-        if lines is not None and len(lines) > 1:
-            line_first = __get_line_from_lines_or_input(lines, 1)
-    return line_first, precision
+def determinant_recursive(matrix: List[List[float]], determinant: float = 0) -> float:
+    indices: List[int] = list(range(len(matrix)))
+    
+    if len(matrix) == 2 and len(matrix[0]) == 2:
+        return matrix[0][0] * matrix[1][1] - matrix[1][0] * matrix[0][1]
+    
+    for focus_column in indices:
+        submatrix: List[List[float]] = copy.deepcopy(matrix)
+        submatrix = submatrix[1:]
+        
+        for i in range(len(submatrix)):
+            submatrix[i] = submatrix[i][0:focus_column] + submatrix[i][focus_column + 1:]
+        
+        sign: int = (-1) ** (focus_column % 2)
+        
+        subdeterminant: float = determinant_recursive(submatrix)
+        determinant += sign * matrix[0][focus_column] * subdeterminant
+    
+    return determinant
 
 
 def print_matrix_and_precision_and_iteration(matrix: List[List[float]], precision: Optional[int] = None, iteration: Optional[int] = None):
@@ -113,18 +213,17 @@ def print_matrix_and_precision_and_iteration(matrix: List[List[float]], precisio
     print('matrix: ')
     for row in matrix:
         for number, length_max in zip(row, lengths_max):
-            number_formatted: str = __get_float_number_formatted(number, precision)
-            number_representable: str = __without_zeros(number_formatted)
-            print(f'{number_representable:>{length_max}}', end=' ')
+            number_formatted: str = __get_number_formatted(number, precision)
+            print(f'{number_formatted:>{length_max}}', end=' ')
         print()
     print()
 
 
-def __get_float_number_formatted(number: float, precision: Optional[int] = None) -> str:
+def __get_number_formatted(number: float, precision: Optional[int] = None) -> str:
     number_formatted: str = f'{number:f}'
     if precision is not None:
         number_formatted = f'{number:.{precision}f}'
-    return number_formatted
+    return number_formatted.rstrip('0').rstrip('.')
 
 
 def __try_convert(value: Any, type_to_convert: Type) -> bool:
@@ -162,16 +261,12 @@ def __round(number: float, precision: Optional[int] = None) -> float:
     return number
 
 
-def __without_zeros(element: Union[str, int, float]) -> str:
-    return str(element).rstrip('0').rstrip('.')
-
-
 def __get_lengths_max(matrix: List[List[float]], precision: Optional[int] = None) -> List[int]:
-    lengths_max: List[int] = [len(__without_zeros(element)) for element in matrix[0]]
+    lengths_max: List[int] = [len(__get_number_formatted(element, precision)) for element in matrix[0]]
     for row in matrix:
         for length_index, number in enumerate(row):
-            number_formatted: str = __get_float_number_formatted(number, precision)
-            length_current: int = len(__without_zeros(number_formatted))
+            number_formatted: str = __get_number_formatted(number, precision)
+            length_current: int = len(number_formatted)
             if length_current > lengths_max[length_index]:
                 lengths_max[length_index] = length_current
     return lengths_max
@@ -190,6 +285,7 @@ def main() -> None:
         '0': handler_exit,
         '1': solve_from_file,
         '2': solve_from_console,
+        '3': solve_from_random,
     }
     print('Gauss method')
     while True:
@@ -198,12 +294,15 @@ Enter action:
 0 - exit
 1 - enter from file
 2 - enter from console
+3 - enter from random
 """)
         action_handler: Callable = action_to_handler.get(action, handler_unknown)
         try:
             action_handler()
         except ValueError:
             print('Only numbers are allowed')
+        except FileNotFoundError:
+            print('File not found')
         except Exception as exception:
             print(exception)
 
