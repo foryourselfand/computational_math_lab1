@@ -22,24 +22,25 @@ def __is_close(first: float, second: float) -> bool:
     return isclose(first, second, rel_tol=EPSILON, abs_tol=EPSILON)
 
 
-def get_solutions(matrix_input: List[List[float]], precision: Optional[int]) -> List[float]:
-    matrix: List[List[float]] = copy.deepcopy(matrix_input)
-    print_matrix_and_precision_and_iteration(matrix, precision)
-    for i in range(len(matrix) - 1):
-        for j in range(i + 1, len(matrix)):
-            __check_zero_division(matrix, i)
-            div: float = __round(matrix[j][i] / matrix[i][i], precision)
-            matrix[j][-1] = __round(matrix[j][-1] - div * matrix[i][-1], precision)
-            for k in range(i, len(matrix)):
-                matrix[j][k] = __round(matrix[j][k] - div * matrix[i][k], precision)
-        print_matrix_and_precision_and_iteration(matrix, precision, iteration=i + 1)
+def get_solutions(matrix: List[List[float]], precision: Optional[int]) -> List[float]:
+    a: List[List[float]] = copy.deepcopy(matrix)
+    n: int = len(a)
+    print_matrix_and_precision_and_iteration(a, precision)
+    for k in range(1, n):
+        for j in range(k, n):
+            __check_zero_division(a, k - 1)
+            m: float = __round(a[j][k - 1] / a[k - 1][k - 1], precision)
+            for i in range(n + 1):
+                a[j][i] = __round(a[j][i] - m * a[k - 1][i], precision)
+        print_matrix_and_precision_and_iteration(a, precision, iteration=k)
     
-    solutions: List[float] = [0 for _ in range(len(matrix))]
-    for i in range(len(matrix) - 1, -1, -1):
-        __check_zero_division(matrix, i)
-        numerator: float = sum(matrix[i][j] * solutions[j] for j in range(i + 1, len(matrix)))
-        solutions[i] = __round((matrix[i][-1] - numerator) / matrix[i][i], precision)
-    return solutions
+    x: List[float] = [0 for _ in range(n)]
+    for i in range(n - 1, -1, -1):
+        __check_zero_division(a, i)
+        x[i] = __round(a[i][-1] / a[i][i], precision)
+        for c in range(n - 1, i, -1):
+            x[i] = __round(x[i] - (a[i][c] * x[c] / a[i][i]), precision)
+    return x
 
 
 def get_residuals(matrix: List[List[float]], solution: List[float], precision: Optional[int]) -> List[float]:
