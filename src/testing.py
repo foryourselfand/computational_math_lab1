@@ -1,6 +1,8 @@
 import copy
 import decimal
 from math import isclose
+from random import randint
+from random import uniform
 from typing import Any
 from typing import Callable
 from typing import Dict
@@ -8,7 +10,6 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Type
-from random import randint
 
 
 EPSILON = 1e-08
@@ -106,14 +107,21 @@ def get_matrix_and_precision_from_random() -> Tuple[List[List[float]], Optional[
     matrix_size_input: str = input('Enter matrix size (default = 5): ').strip()
     matrix_size: int = int(matrix_size_input) if matrix_size_input else 5
     
-    solutions_range = __get_range(name='solutions', bound_left=-10, bound_right=10)
-    coefficients_range = __get_range(name='coefficient', bound_left=-100, bound_right=100)
+    random_generator: Callable = randint
+    number_converter: Callable = int
+    random_generator_input = input('Enter values type (int/float) (default = int): ').strip()
+    if random_generator_input == 'float':
+        random_generator = uniform
+        number_converter = float
     
-    solutions: List[float] = [randint(solutions_range[0], solutions_range[1]) for _ in range(matrix_size)]
+    solutions_range: Tuple[float, float] = __get_range(name='solutions', bound_left=-10, bound_right=10, number_converter=number_converter)
+    coefficients_range: Tuple[float, float] = __get_range(name='coefficient', bound_left=-100, bound_right=100, number_converter=number_converter)
+    
+    solutions: List[float] = [random_generator(solutions_range[0], solutions_range[1]) for _ in range(matrix_size)]
     
     matrix: List[List[float]] = []
     for _ in range(matrix_size):
-        coefficients: List[float] = [randint(coefficients_range[0], coefficients_range[1]) for _ in range(matrix_size)]
+        coefficients: List[float] = [random_generator(coefficients_range[0], coefficients_range[1]) for _ in range(matrix_size)]
         multipliers: List[float] = [solution * coefficient for solution, coefficient in zip(solutions, coefficients)]
         after_equal_sign: float = sum(multipliers)
         rows: List[float] = coefficients + [after_equal_sign]
@@ -122,12 +130,15 @@ def get_matrix_and_precision_from_random() -> Tuple[List[List[float]], Optional[
     return matrix, None
 
 
-def __get_range(name: str, bound_left: int, bound_right: int) -> Tuple[int, int]:
+def __get_range(name: str, bound_left: float, bound_right: float, number_converter: Callable) -> Tuple[float, float]:
     range_input: str = input(f'Enter {name} range (default = {bound_left} {bound_right}): ')
-    range_default: Tuple[int, int] = bound_left, bound_right
+    range_default: Tuple[float, float] = bound_left, bound_right
     if range_input:
         range_splitted: List[str] = range_input.split()
-        range_default = int(range_splitted[0]), int(range_splitted[1])
+        try:
+            range_default = number_converter(range_splitted[0]), number_converter(range_splitted[1])
+        except ValueError:
+            raise Exception('Expected int')
     return range_default
 
 
@@ -283,18 +294,18 @@ def handler_unknown() -> None:
 def main() -> None:
     action_to_handler: Dict[str, Callable] = {
         '0': handler_exit,
-        '1': solve_from_file,
-        '2': solve_from_console,
-        '3': solve_from_random,
+        '1': solve_from_random,
+        '2': solve_from_file,
+        '3': solve_from_console,
     }
     print('Gauss method')
     while True:
         action: str = input("""
 Enter action:
 0 - exit
-1 - enter from file
-2 - enter from console
-3 - enter from random
+1 - enter from random
+2 - enter from file
+3 - enter from console
 """)
         action_handler: Callable = action_to_handler.get(action, handler_unknown)
         try:
