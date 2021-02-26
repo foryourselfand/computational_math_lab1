@@ -13,13 +13,27 @@ from typing import Type
 
 
 EPSILON = 1e-08
-
-# round(0.5) -> 1.0
-decimal.getcontext().rounding = decimal.ROUND_HALF_UP
+decimal.getcontext().rounding = decimal.ROUND_HALF_UP  # round(0.5) -> 1.0
 
 
 def __is_close(first: float, second: float) -> bool:
     return isclose(first, second, rel_tol=EPSILON, abs_tol=EPSILON)
+
+
+def __round(number: float, precision: Optional[int] = None) -> float:
+    if precision is not None:
+        number_decimal: decimal.Decimal = decimal.Decimal(str(number))
+        number_rounded = round(number_decimal, precision)
+        return float(number_rounded)
+    return number
+
+
+def __check_zero_division(matrix: List[List[float]], index: int) -> None:
+    if __is_close(matrix[index][index], 0):
+        if all(__is_close(matrix[index][j], 0) for j in range(len(matrix[index]))):
+            raise Exception('Infinite many solutions')
+        else:
+            raise Exception('No solutions')
 
 
 def get_solutions(matrix: List[List[float]], precision: Optional[int]) -> List[float]:
@@ -57,12 +71,25 @@ def get_residuals(matrix: List[List[float]], solution: List[float], precision: O
     return residuals
 
 
-def __check_zero_division(matrix: List[List[float]], i: int) -> None:
-    if __is_close(matrix[i][i], 0):
-        if all(__is_close(matrix[i][j], 0) for j in range(len(matrix[i]))):
-            raise Exception('Infinite many solutions')
-        else:
-            raise Exception('No solutions')
+def determinant_recursive(matrix: List[List[float]], determinant: float = 0) -> float:
+    indices: List[int] = list(range(len(matrix)))
+    
+    if len(matrix) == 2 and len(matrix[0]) == 2:
+        return matrix[0][0] * matrix[1][1] - matrix[1][0] * matrix[0][1]
+    
+    for focus_column in indices:
+        submatrix: List[List[float]] = copy.deepcopy(matrix)
+        submatrix = submatrix[1:]
+        
+        for i in range(len(submatrix)):
+            submatrix[i] = submatrix[i][0:focus_column] + submatrix[i][focus_column + 1:]
+        
+        sign: int = (-1) ** (focus_column % 2)
+        
+        subdeterminant: float = determinant_recursive(submatrix)
+        determinant += sign * matrix[0][focus_column] * subdeterminant
+    
+    return determinant
 
 
 def solve(matrix_and_precision_getter: Callable[[], Tuple[List[List[float]], Optional[int]]]) -> None:
@@ -159,20 +186,20 @@ def get_matrix_and_precision(lines: Optional[List[str]] = None) -> Tuple[List[Li
     precision: Optional[int] = None
     if __try_convert(line_first, int):
         precision = int(line_first)
-        if precision < 0:
+        if precision <= 0:
             raise Exception('precision must be non-negative')
-        if lines is not None and len(lines) > 1:
-            line_first = __get_line_from_lines_or_input(lines, 1)
+        line_first = __get_line_from_lines_or_input(lines, 1)
     
     line_first_converted: List[float] = __convert_line_and_add_to_matrix(line_first, matrix, precision)
     line_first_len: int = len(line_first_converted)
-    if line_first_len <= 2 or (lines is not None and len(lines) <= 1):
+
+    if precision is None and (line_first_len <= 2 or (lines and len(lines) <= 1)):
         raise Exception('size of matrix must greater than one')
     
     matrix_size: int = len(matrix[0]) - 1
     index_additional: int = 0 if precision is None else 1
     
-    if lines is not None:
+    if lines:
         lines_len: int = len(lines) - index_additional
         if lines_len < matrix_size:
             raise Exception('number of equations is less than number of unknowns')
@@ -188,27 +215,6 @@ def get_matrix_and_precision(lines: Optional[List[str]] = None) -> Tuple[List[Li
             raise Exception('matrix must be extended square')
     
     return matrix, precision
-
-
-def determinant_recursive(matrix: List[List[float]], determinant: float = 0) -> float:
-    indices: List[int] = list(range(len(matrix)))
-    
-    if len(matrix) == 2 and len(matrix[0]) == 2:
-        return matrix[0][0] * matrix[1][1] - matrix[1][0] * matrix[0][1]
-    
-    for focus_column in indices:
-        submatrix: List[List[float]] = copy.deepcopy(matrix)
-        submatrix = submatrix[1:]
-        
-        for i in range(len(submatrix)):
-            submatrix[i] = submatrix[i][0:focus_column] + submatrix[i][focus_column + 1:]
-        
-        sign: int = (-1) ** (focus_column % 2)
-        
-        subdeterminant: float = determinant_recursive(submatrix)
-        determinant += sign * matrix[0][focus_column] * subdeterminant
-    
-    return determinant
 
 
 def print_matrix_and_precision_and_iteration(matrix: List[List[float]], precision: Optional[int] = None, iteration: Optional[int] = None):
@@ -263,14 +269,6 @@ def __convert_line_and_add_to_matrix(line: str, matrix: List[List[float]], preci
         line_converted.append(element_rounded)
     matrix.append(line_converted)
     return line_converted
-
-
-def __round(number: float, precision: Optional[int] = None) -> float:
-    if precision is not None:
-        number_decimal: decimal.Decimal = decimal.Decimal(str(number))
-        number_rounded = round(number_decimal, precision)
-        return float(number_rounded)
-    return number
 
 
 def __get_lengths_max(matrix: List[List[float]], precision: Optional[int] = None) -> List[int]:
